@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"math/rand"
+	"strings"
+	"time"
 
 	"github.com/TikTokTechImmersion/assignment_demo_2023/rpc-server/kitex_gen/rpc"
 )
@@ -11,21 +12,90 @@ import (
 type IMServiceImpl struct{}
 
 func (s *IMServiceImpl) Send(ctx context.Context, req *rpc.SendRequest) (*rpc.SendResponse, error) {
+	message := &Message{
+		Content: req.Message.GetText(),
+		Sender: req.Message.GetSender(),
+		SendTime: time.Now().Unix(),
+	}
+
+	chatKey := standardiseChatKey(req.Message.GetChat())
+
+	err := redisClient.SaveMessage(ctx, chatKey, message)
+
+	if(err != nil) {
+		return nil, err	
+	}
+
 	resp := rpc.NewSendResponse()
-	resp.Code, resp.Msg = areYouLucky()
+    resp.Code, resp.Msg = 0, "success"
+
 	return resp, nil
 }
+
 
 func (s *IMServiceImpl) Pull(ctx context.Context, req *rpc.PullRequest) (*rpc.PullResponse, error) {
+	
+	chatKey := standardiseChatKey(req.GetChat())
+	
+	start := req.GetCursor()
+	end := start + int64(req.GetLimit())
+
+	messages,err := redisClient.GetMessagesByChat(ctx, chatKey, start, end, req.GetReverse())
+	if err != nil {
+       return nil, err
+    }
+
+	
+    rpcMessages := make([]*rpc.Message, 0)
+    var counter = int64(0)
+	var has_more = false
+	var nextCursor = int64(0)
+	
+	for _, message := range messages {
+
+		if(counter +1 > int64(req.GetLimit())) {
+			has_more = true
+			nextCursor = end
+			break
+		}
+		rpcMessage := &rpc.Message{
+			Chat: req.GetChat(),
+			Sender: message.Sender,
+			Text: message.Content,
+			SendTime: message.SendTime,
+		}
+		rpcMessages = append(rpcMessages, rpcMessage)
+		counter += 1
+	}
+	
+
 	resp := rpc.NewPullResponse()
-	resp.Code, resp.Msg = areYouLucky()
+	resp.Code = 0
+	resp.Msg = "success"
+
+	
+	resp.Messages = rpcMessages
+	resp.HasMore = &has_more
+	resp.NextCursor = &nextCursor
+	
+
 	return resp, nil
 }
 
-func areYouLucky() (int32, string) {
-	if rand.Int31n(2) == 1 {
-		return 0, "success"
-	} else {
-		return 500, "oops"
+
+func standardiseChatKey(chatKey string) (string) {
+	var standardisedChatKey string
+
+	splitKey := strings.Split(chatKey,":")
+
+	firstPart := splitKey[0]
+	secondPart := splitKey[1]
+
+	if(strings.Compare(firstPart,secondPart) < 0) {
+		standardisedChatKey = firstPart + ":" + secondPart
+	} else {	
+		standardisedChatKey = secondPart + ":" + firstPart
 	}
+
+	return standardisedChatKey
 }
