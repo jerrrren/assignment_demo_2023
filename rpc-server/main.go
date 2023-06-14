@@ -2,19 +2,12 @@ package main
 
 import (
 	"log"
-	"context"
 
 	rpc "github.com/TikTokTechImmersion/assignment_demo_2023/rpc-server/kitex_gen/rpc/imservice"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
 )
-
-
-var (
-    redisClient = &RedisClient{}
-)
-
 
 func main() {
 	r, err := etcd.NewEtcdRegistry([]string{"etcd:2379"}) // r should not be reused.
@@ -30,12 +23,4 @@ func main() {
 	if err != nil {
 		log.Println(err.Error())
 	}
-
-	ctx := context.Background()
-	redisClient = NewRedisClient()
-
 }
-
-
-
-
